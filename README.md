@@ -23,10 +23,10 @@ EARTH Env data can be accessed at https://www.earthenv.org. Land-Use Harmonizati
 
 Global Aboveground and Belowground Biomass Carbon Density Maps can be accessed at https://daac.ornl.gov/VEGETATION/guides/Global_Maps_C_Density_2010.html.  
 
-SOC data is from literature (https://pnas.org/doi/full/10.1073/pnas.1706103114.  
 
+To replicate the results, please run the code scripts in subsequent orders from code script named run1 series to run24 series. 
 
-To replicate the results, please run the code scripts in subsequent orders from code script named run4 series to run24 series. run1-run3 series are no longer used but is provided alongside for completeness and integrity of the code system.
+Script run1-run3 processes historical climate and grazing data. These are supplementary to the niche analysis for script 4-5. Script run1_historical_simulation.m downloads and process the historical climate data for the variable 'pr', 'tas', 'hurs', 'sfcWind' from CMIP, and land use data from HYDE database. Script run1_historical_simulation_regional.m conducts region-specific reanalysis using historical data, run1_sensitivity_timeframe.m tests the sensitivity of the historical timeframe chosen. Script run2_2newclimate.m and run3_5historical_climate.m add more climate data to the ensemble and conduct niche analysis using historical climate and grazing data. 
 
 Script run4_modern_climateniche.m downloads and processes modern datasets, including downscaled CHELSA datasets
 
@@ -78,8 +78,6 @@ Script run22_turnover_MRIdata.m uses alternative climate dataset to calculate th
 Script run24_species_specific_heatmap.m produces species-specific heatmaps
 
 Script run25_treemap_2100.R creates heatmaps in Fig. 3
-
-%Not needed: Script run1_historical_simulation.m downloads and process the historical climate data for the variable 'pr', 'tas', 'hurs', 'sfcWind' from CMIP, and land use data from HYDE database. Script run1_historical_simulation_regional.m conducts region-specific reanalysis using historical data, run1_sensitivity_timeframe.m tests the sensitivity of the historical timeframe chosen. Script run2_2newclimate.m and run3_5historical_climate.m add more climate data to the ensemble and conduct niche analysis using historical climate and grazing data.
 
 Key scripts:
 run13_figures_allnew has the scatter plots that are in Figure 1.
