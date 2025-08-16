@@ -1,102 +1,102 @@
 addpath(genpath('/Users/lichaohui/Desktop/calculation/grazingniche'));
 addpath(genpath('/Users/lichaohui/Desktop/calculation/command'));
 
-%% chelsa data
-% This section of data may take sometime to run. Be patient and wait for
-% around 10 minutes. This section of code does not need to be
-% run everytime.
+%% Paths
+base_dir   = '/Users/lichaohui/Desktop/calculation/grazingniche';
+dir_raw    = fullfile(base_dir,'rawdata','climate');
+dir_out    = fullfile(base_dir,'matdata');
+if ~exist(dir_raw,'dir'); mkdir(dir_raw); end
+if ~exist(dir_out,'dir'); mkdir(dir_out); end
 
-% documentation and data can be found here https://chelsa-climate.org/downloads/
-% this is downloaded by clicking the data and using wget url.
-% documentation of data can be found here 
-% https://chelsa-climate.org/wp-admin/download-page/CHELSA_tech_specification_V2.pdf
-% or searching in zotero "chelsa"
+% Variables & years
+variables = {'pr','tas','sfcWind','hurs'};   % order matters for scaling/offset
+years     = 2010:2018;
+months    = 1:12;
 
-% % Base directory
-% dir_path = '/Users/lichaohui/Desktop/calculation/grazingniche/climate/';
-% 
-% % List of variables
-% variables = {'pr', 'tas', 'sfcWind', 'hurs'};
-% 
-% % Loop over each variable
-% for v = 1:length(variables)
-%     % Get the current variable
-%     var = variables{v};
-%     
-%     % Loop over each month
-%     for month = 1:12
-%         % Construct the URL and filename
-%         url = sprintf('https://os.zhdk.cloud.switch.ch/envicloud/chelsa/chelsa_V2/GLOBAL/monthly/%s/CHELSA_%s_%02d_2015_V.2.1.tif', var, var, month);
-%         filename = sprintf('CHELSA_%s_%02d_2015_V.2.1.tif', var, month);
-%         full_path = fullfile(dir_path, filename);
-% 
-%         % Download the file
-%         websave(full_path, url);
-%     end
-% end
-%% %%%%%
-% load and rescale the downloaded data into 1800*3600
-% 
-% this section of code can also take sometime to run.
-% the outcome of this section is 4 new .mat files in the main directory
-% named "aggregate_hurs.mat", "aggregate_pr.mat", etc.
+% Scaling & offsets aligned with 'variables' order
+%   pr: divide by 100
+%   tas: divide by 10 then add -273.15 (K -> °C)
+%   sfcWind: divide by 1000
+%   hurs: divide by 100
+scaling_factors = [100, 10, 1000, 100];
+offsets         = [  0, -273.15,   0,   0];
 
-% % Specify your directory
-% dir_path = '/Users/lichaohui/Desktop/calculation/grazingniche/rawdata/climate/';
-% 
-% % List of variables to process
-% %variables = {'pr', 'tas', 'sfcWind', 'hurs'};
-% variables = {'hurs'};
-% 
-% % Scaling factors for each variable
-% scaling_factors = [100, 10, 1000, 100];
-% offsets = [0, -273.15, 0, 0];
-% 
-% % Loop over all variables
-% for i = 1:length(variables)
-%     % Current variable and scaling factor
-%     var = variables{i};
-%     scaling_factor = scaling_factors(i);
-%     offset = offsets(i);
-%     
-%     % Load the first file
-%     filename = sprintf('CHELSA_%s_01_2015_V.2.1.tif', var);
-%     full_path = fullfile(dir_path, filename);
-%     
-%     % Load the data and get the size
-%     data = imread(full_path);
-%     data = imresize(data, [1740, 3600]); % Resize data
-%     [nrows, ncols] = size(data);
-%     
-%     % Initialize the 3D matrix with the correct size
-%     data_all = zeros([nrows, ncols, 12]);
-%     data_all(:,:,1) = data / scaling_factor + offset; % Add the first month to the matrix
-%     
-%     % Load the rest of the data
-%    for month = 2:12 % tas, pr, sfcWind
-%            % for month = [2,3,5:12] % hurs data
-% 
-%         % Construct the filename
-%         filename = sprintf('CHELSA_%s_%02d_2015_V.2.1.tif', var, month);
-%         full_path = fullfile(dir_path, filename);
-%         
-%         % Load the data into the matrix
-%         data = imread(full_path);
-%         data = imresize(data, [1740, 3600]); % Resize data
-%         data_all(:, :, month) = data / scaling_factor + offset;
-%     end
-%       Northplaceholder=zeros(60,3600)
-% 
-%     % Compute the mean or sum across the 3rd dimension (i.e., across months)
-%     if strcmp(var, 'pr') % If the variable is 'pr', sum up monthly precipitations
-%         aggregate_data = [Northplaceholder;sum(data_all, 3)];
-%      else % For all other variables, compute the mean
-%         aggregate_data = [Northplaceholder;mean(data_all, 3)];
-%     end
-%     
-%     % Save the variable to a .mat file
-%     save(['/Users/lichaohui/Desktop/calculation/grazingniche/matdata/aggregate_' var '.mat'], 'aggregate_data');
-% end
+% Target grid size (1740 + 60-pad = 1800 rows total)
+target_rows = 1740; target_cols = 3600;
+north_pad   = 60;   % to prepend zeros, making final 1800 x 3600
+
+% Download & process
+for vi = 1:numel(variables)
+    var   = variables{vi};
+    scale = scaling_factors(vi);
+    offs  = offsets(vi);
+
+    % accumulate ANNUAL aggregates into a 3D stack: [rows, cols, years]
+    annual_stack = [];
+
+    % --------- DOWNLOAD (skip if file exists) ---------
+    for yy = years
+        for mm = months
+            url = sprintf('https://os.zhdk.cloud.switch.ch/chelsav2/GLOBAL/monthly/%s/CHELSA_%s_%02d_%d_V.2.1.tif', ...
+                          var, var, mm, yy);
+            fname = sprintf('CHELSA_%s_%02d_%d_V.2.1.tif', var, mm, yy);
+            fpath = fullfile(dir_raw, fname);
+            if ~isfile(fpath)
+                try
+                    websave(fpath, url);
+                catch ME
+                    warning('Failed to download %s: %s', url, ME.message);
+                end
+            end
+        end
+    end
+
+    % --------- BUILD ANNUAL AGGREGATES (per year) ---------
+    for yy = years
+        % Preallocate monthly stack for this year
+        monthly_stack = zeros(target_rows, target_cols, numel(months), 'double');
+
+        for mi = 1:numel(months)
+            mm = months(mi);
+            fname = sprintf('CHELSA_%s_%02d_%d_V.2.1.tif', var, mm, yy);
+            fpath = fullfile(dir_raw, fname);
+            if ~isfile(fpath)
+                error('Missing file: %s', fpath);
+            end
+
+            % Load, resize, scale, offset
+            raw = double(imread(fpath));
+            raw = imresize(raw, [target_rows, target_cols]);  % 1740 x 3600
+            monthly_stack(:,:,mi) = raw./scale + offs;
+        end
+
+        % Annual aggregate: sum for precipitation; mean for others
+        if strcmp(var,'pr')
+            annual = sum(monthly_stack, 3, 'omitnan');
+        else
+            annual = mean(monthly_stack, 3, 'omitnan');
+        end
+
+        % Append northern padding to reach 1800 x 3600
+        annual = [zeros(north_pad, target_cols); annual];
+
+        % Accumulate across years
+        if isempty(annual_stack)
+            annual_stack = zeros(size(annual,1), size(annual,2), numel(years));
+        end
+        annual_stack(:,:,yy - years(1) + 1) = annual;
+    end
+
+    % --------- 9-year MEAN (2010–2018) ---------
+    nine_year_mean = mean(annual_stack, 3, 'omitnan');  % 1800 x 3600
+
+    % Save
+    aggregate_data = nine_year_mean; %#ok<NASGU>
+    save(fullfile(dir_out, sprintf('aggregate_%s.mat', var)), 'aggregate_data','-v7.3');
+
+    fprintf('Saved 2010–2018 mean for %s to %s\n', var, fullfile(dir_out, sprintf('aggregate_%s.mat', var)));
+end
+
 %% Load the data
 % if you are running the code not for the first time, you only need to
 % start with this section
